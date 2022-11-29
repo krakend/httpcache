@@ -25,7 +25,7 @@ type fakeClock struct {
 	elapsed time.Duration
 }
 
-func (c *fakeClock) since(t time.Time) time.Duration {
+func (c *fakeClock) since(_ time.Time) time.Duration {
 	return c.elapsed
 }
 
@@ -1234,7 +1234,7 @@ type transportMock struct {
 	err      error
 }
 
-func (t transportMock) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+func (t transportMock) RoundTrip(_ *http.Request) (resp *http.Response, err error) {
 	return t.response, t.err
 }
 
