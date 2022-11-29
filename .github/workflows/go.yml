@@ -15,7 +15,7 @@ jobs:
     - name: Test
       uses: docker://krakend/builder:latest-linux-generic
       with:
-        args: sh -c "go get -t -v ./...
-         gofmt -w -s . && git diff --exit-code
-         go tool vet .
+        args: sh -c "go get -t -v ./...;
+         gofmt -w -s . && git diff --exit-code;
+         go tool vet .;
          go test -v -race ./..."
