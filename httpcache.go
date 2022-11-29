@@ -272,7 +272,7 @@ func Date(respHeaders http.Header) (date time.Time, err error) {
 
 type realClock struct{}
 
-func (c *realClock) since(d time.Time) time.Duration {
+func (*realClock) since(d time.Time) time.Duration {
 	return time.Since(d)
 }
 
