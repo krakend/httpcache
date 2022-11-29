@@ -227,6 +227,11 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 		}
 		switch req.Method {
 		case "GET":
+			// Since the body is already uncompressed in the cache, we want to
+			// avoid the client trying to decompress it again
+			if resp.Header.Get("Content-Encoding") == "gzip" {
+				resp.Header.Del("Content-Encoding")
+			}
 			// Delay caching until EOF is reached.
 			resp.Body = &cachingReadCloser{
 				R: resp.Body,
