@@ -1,6 +1,8 @@
 httpcache
 =========
 
+This a fork of github.com/gregjones/httpcache which includes the fix from github.com/m4ns0ur/httpcache@fix-json-eof.
+
 [![Build Status](https://travis-ci.org/gregjones/httpcache.svg?branch=master)](https://travis-ci.org/gregjones/httpcache) [![GoDoc](https://godoc.org/github.com/gregjones/httpcache?status.svg)](https://godoc.org/github.com/gregjones/httpcache)
 
 Package httpcache provides a http.RoundTripper implementation that works as a mostly [RFC 7234](https://tools.ietf.org/html/rfc7234) compliant cache for http responses.
