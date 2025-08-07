@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -159,7 +160,58 @@ func setup() {
 		}
 	}))
 
-	mux.HandleFunc("/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/fast/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(longJson)))
+		w.Write(longJson)
+	}))
+	mux.HandleFunc("/slow/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(longJson)))
+
+		f, ok := w.(http.Flusher)
+		if !ok {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		first := len(longJson) / 3
+		second := first * 2
+		w.Write(longJson[:first])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[first:second])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[second:])
+		f.Flush()
+	}))
+
+	mux.HandleFunc("/chunked/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Content-Type", "application/json")
+
+		f, ok := w.(http.Flusher)
+		if !ok {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		f.Flush()
+
+		first := len(longJson) / 3
+		second := first * 2
+		w.Write(longJson[:first])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[first:second])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[second:])
+		f.Flush()
+	}))
+
+	mux.HandleFunc("/weird/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "application/json")
 		// This will force using bufio.Read() instead of chunkedReader.Read()
@@ -411,7 +463,7 @@ func TestCacheOnlyIfBodyRead(t *testing.T) {
 func TestCacheOnJsonBodyRead(t *testing.T) {
 	resetTest()
 	{
-		req, err := http.NewRequest("GET", s.server.URL+"/json", nil)
+		req, err := http.NewRequest("GET", s.server.URL+"/weird/json", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -434,7 +486,7 @@ func TestCacheOnJsonBodyRead(t *testing.T) {
 		}
 	}
 	{
-		req, err := http.NewRequest("GET", s.server.URL+"/json", nil)
+		req, err := http.NewRequest("GET", s.server.URL+"/weird/json", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -443,6 +495,129 @@ func TestCacheOnJsonBodyRead(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "1" {
+			t.Fatalf("XFromCache header isn't set")
+		}
+	}
+}
+
+func TestCacheOnChunkedJsonBodyRead(t *testing.T) {
+	resetTest()
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/chunked/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r json.RawMessage
+		err = json.NewDecoder(resp.Body).Decode(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// in this case, even when Close was not called yet
+		// since is used chunked it can detect EOF, before Close
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Bad status code: %d", resp.StatusCode)
+		}
+		if resp.Header.Get(XFromCache) != "" {
+			t.Fatalf("XFromCache header isn't blank")
+		}
+	}
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/chunked/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "1" {
+			t.Fatalf("XFromCache header isn't set")
+		}
+	}
+}
+
+func TestCacheOnFastJsonBodyRead(t *testing.T) {
+	resetTest()
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/fast/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r json.RawMessage
+		err = json.NewDecoder(resp.Body).Decode(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// in this case, even when Close was not called yet
+		// since is used chunked it can detect EOF, before Close
+		defer resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "" {
+			t.Fatalf("XFromCache header isn't blank")
+		}
+	}
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/fast/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "1" {
+			t.Fatalf("XFromCache header isn't set")
+		}
+	}
+}
+
+func TestCacheOnSlowJsonBodyRead(t *testing.T) {
+	resetTest()
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/slow/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r json.RawMessage
+		err = json.NewDecoder(resp.Body).Decode(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// in this case, even when Close was not called yet
+		// since is used chunked it can detect EOF, before Close
+		defer resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "" {
+			t.Fatalf("XFromCache header isn't blank")
+		}
+	}
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/slow/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
 		if resp.Header.Get(XFromCache) != "1" {
 			t.Fatalf("XFromCache header isn't set")
 		}
@@ -1524,3 +1699,17 @@ func TestClientTimeout(t *testing.T) {
 		t.Error("client.Do took 2+ seconds, want < 2 seconds")
 	}
 }
+
+// we need a json that we can "stream" in small amount of bytes
+var longJson []byte = ([]byte)(`
+{
+	"a": "a_1234567890123456789012345678901234567890",
+	"b": "b_1234567890123456789012345678901234567890",
+	"c": "c_1234567890123456789012345678901234567890",
+	"d": "d_1234567890123456789012345678901234567890",
+	"e": "e_1234567890123456789012345678901234567890",
+	"f": "f_1234567890123456789012345678901234567890",
+	"g": "g_1234567890123456789012345678901234567890",
+	"h": "h_1234567890123456789012345678901234567890",
+	"i": "i_1234567890123456789012345678901234567890"
+}`)

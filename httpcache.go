@@ -540,8 +540,9 @@ func (r *cachingReadCloser) Read(p []byte) (n int, err error) {
 	r.readed = true
 	n, err = r.R.Read(p)
 	r.buf.Write(p[:n])
-	// we only get an io.EOF if we have a Content-Length, or
-	// Transfer-Encoding: chunked. In the very weird case that
+	// we only get an io.EOF if we have a Content-Length (event with
+	// Transfer-Encoding: chunked we might not get an EOF error marking
+	// the end). Also inn the very weird case that
 	// none of those are provided, we can only know that we have
 	// readed the content, because something was been read and
 	// close was called.
