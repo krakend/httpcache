@@ -165,7 +165,8 @@ func setup() {
 		// This will force using bufio.Read() instead of chunkedReader.Read()
 		// to miss the EOF.
 		w.Header().Set("Transfer-encoding", "identity")
-		json.NewEncoder(w).Encode(map[string]string{"k": "v"})
+		// json.NewEncoder(w).Encode(map[string]string{"k": "v"})
+		w.Write(([]byte)(`{"k": "v"}foo`))
 	}))
 }
 
@@ -418,12 +419,16 @@ func TestCacheOnJsonBodyRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
 		var r json.RawMessage
 		err = json.NewDecoder(resp.Body).Decode(&r)
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		// the response is cached on close, because server
+		// is not returning 'Content-Length' nor
+		// 'Transfer-Encoding: chunked'
+		resp.Body.Close()
 		if resp.Header.Get(XFromCache) != "" {
 			t.Fatalf("XFromCache header isn't blank")
 		}
@@ -437,7 +442,7 @@ func TestCacheOnJsonBodyRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
 		if resp.Header.Get(XFromCache) != "1" {
 			t.Fatalf("XFromCache header isn't set")
 		}

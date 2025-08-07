@@ -527,6 +527,9 @@ type cachingReadCloser struct {
 	OnEOF func(io.Reader)
 
 	buf bytes.Buffer // buf stores a copy of the content of R.
+
+	cached bool
+	readed bool
 }
 
 // Read reads the next len(p) bytes from R or until R is drained. The
@@ -534,15 +537,43 @@ type cachingReadCloser struct {
 // return, err is io.EOF and OnEOF is called with a full copy of what
 // has been read so far.
 func (r *cachingReadCloser) Read(p []byte) (n int, err error) {
+	r.readed = true
 	n, err = r.R.Read(p)
 	r.buf.Write(p[:n])
-	if err == io.EOF || n < len(p) {
-		r.OnEOF(bytes.NewReader(r.buf.Bytes()))
+	// we only get an io.EOF if we have a Content-Length, or
+	// Transfer-Encoding: chunked. In the very weird case that
+	// none of those are provided, we can only know that we have
+	// readed the content, because something was been read and
+	// close was called.
+	if err == io.EOF {
+		r.cacheIt()
 	}
 	return n, err
 }
 
+func (r *cachingReadCloser) cacheIt() {
+	if !r.cached {
+		r.cached = true
+		if r.readed {
+			r.OnEOF(bytes.NewReader(r.buf.Bytes()))
+		}
+	}
+}
+
 func (r *cachingReadCloser) Close() error {
+	// it might happen that when no 'Content-Length' is provided,
+	// and no 'Transfer-Encoding: chunked' is set, that we do not
+	// know when the body is fully read. For example, a json decoder
+	// will read a body until the end of a valid block of json (and
+	// would not keep reading beyond that): so a body of `{"k":"v"}foo`
+	// with extra characters, would not be fully read, never reaching
+	// the EOF, so would not be cached. However, since the connection
+	// is closed at some point, we can assume that the readed values
+	// were the good ones for the response.
+	//
+	// The problem would be if we had not read anything from the respose
+	// or we had read a partial response :/
+	r.cacheIt()
 	return r.R.Close()
 }
 
