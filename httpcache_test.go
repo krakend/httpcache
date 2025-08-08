@@ -48,7 +48,7 @@ func setup() {
 	mux := http.NewServeMux()
 	s.server = httptest.NewServer(mux)
 
-	mux.HandleFunc("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 	}))
 
@@ -72,7 +72,7 @@ func setup() {
 		w.Write([]byte("Some text content"))
 	}))
 
-	mux.HandleFunc("/nostore", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/nostore", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 	}))
 
@@ -94,27 +94,27 @@ func setup() {
 		w.Header().Set("last-modified", lm)
 	}))
 
-	mux.HandleFunc("/varyaccept", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/varyaccept", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Vary", "Accept")
 		w.Write([]byte("Some text content"))
 	}))
 
-	mux.HandleFunc("/doublevary", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/doublevary", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Vary", "Accept, Accept-Language")
 		w.Write([]byte("Some text content"))
 	}))
-	mux.HandleFunc("/2varyheaders", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/2varyheaders", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Add("Vary", "Accept")
 		w.Header().Add("Vary", "Accept-Language")
 		w.Write([]byte("Some text content"))
 	}))
-	mux.HandleFunc("/varyunused", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/varyunused", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Vary", "X-Madeup-Header")
@@ -145,11 +145,11 @@ func setup() {
 	}))
 
 	// Take 3 seconds to return 200 OK (for testing client timeouts).
-	mux.HandleFunc("/3seconds", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/3seconds", http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		time.Sleep(3 * time.Second)
 	}))
 
-	mux.HandleFunc("/infinite", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/infinite", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		for {
 			select {
 			case <-s.done:
@@ -160,13 +160,13 @@ func setup() {
 		}
 	}))
 
-	mux.HandleFunc("/fast/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/fast/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(longJson)))
 		w.Write(longJson)
 	}))
-	mux.HandleFunc("/slow/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/slow/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(longJson)))
@@ -188,7 +188,7 @@ func setup() {
 		f.Flush()
 	}))
 
-	mux.HandleFunc("/chunked/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/chunked/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "application/json")
 
@@ -211,7 +211,7 @@ func setup() {
 		f.Flush()
 	}))
 
-	mux.HandleFunc("/weird/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/weird/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "application/json")
 		// This will force using bufio.Read() instead of chunkedReader.Read()
@@ -315,7 +315,7 @@ func TestDontServeHeadResponseToGetRequest(t *testing.T) {
 	}
 }
 
-func TestDontStorePartialRangeInCache(t *testing.T) {
+func TestDontStorePartialRangeInCache(t *testing.T) { // skipcq: GO-R1005
 	resetTest()
 	{
 		req, err := http.NewRequest("GET", s.server.URL+"/range", nil)
@@ -943,7 +943,7 @@ func TestGetWithDoubleVary(t *testing.T) {
 	}
 }
 
-func TestGetWith2VaryHeaders(t *testing.T) {
+func TestGetWith2VaryHeaders(t *testing.T) { // skipcq: GO-R1005
 	resetTest()
 	// Tests that multiple Vary headers' comma-separated lists are
 	// merged. See https://github.com/gregjones/httpcache/issues/27.

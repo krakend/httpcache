@@ -134,7 +134,7 @@ func varyMatches(cachedResp *http.Response, req *http.Request) bool {
 // If there is a stale Response, then any validators it contains will be set on the new request
 // to give the server a chance to respond with NotModified. If this happens, then the cached Response
 // will be returned.
-func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) { // skipcq: GO-R1005
 	cacheKey := cacheKey(req)
 	cacheable := (req.Method == "GET" || req.Method == "HEAD") && req.Header.Get("range") == ""
 	var cachedResp *http.Response
@@ -291,7 +291,7 @@ var clock timer = &realClock{}
 //
 // Because this is only a private cache, 'public' and 'private' in cache-control aren't
 // signficant. Similarly, smax-age isn't used.
-func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
+func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) { // skipcq: GO-R1005
 	respCacheControl := parseCacheControl(respHeaders)
 	reqCacheControl := parseCacheControl(reqHeaders)
 	if _, ok := reqCacheControl["no-cache"]; ok {
@@ -435,7 +435,7 @@ func getEndToEndHeaders(respHeaders http.Header) []string {
 			hopByHopHeaders[http.CanonicalHeaderKey(extra)] = struct{}{}
 		}
 	}
-	endToEndHeaders := []string{}
+	var endToEndHeaders []string
 	for respHeader := range respHeaders {
 		if _, ok := hopByHopHeaders[respHeader]; !ok {
 			endToEndHeaders = append(endToEndHeaders, respHeader)
