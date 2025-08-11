@@ -553,12 +553,16 @@ func (r *cachingReadCloser) Read(p []byte) (n int, err error) {
 }
 
 func (r *cachingReadCloser) cacheIt() {
-	if !r.cached {
-		r.cached = true
-		if r.readed {
-			r.OnEOF(bytes.NewReader(r.buf.Bytes()))
-		}
+	if r.cached {
+		return
 	}
+	r.cached = true
+	if !r.readed {
+		// if there was no attempt to read the body, we assume
+		// is not used.
+		return
+	}
+	r.OnEOF(bytes.NewReader(r.buf.Bytes()))
 }
 
 func (r *cachingReadCloser) Close() error {
