@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/krakendio/httpcache"
+	"github.com/krakend/httpcache"
 )
 
 // Cache excercises a httpcache.Cache implementation.
