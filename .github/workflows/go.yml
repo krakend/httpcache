@@ -17,5 +17,5 @@ jobs:
       with:
         args: sh -c "go get -t -v ./...;
          gofmt -w -s . && git diff --exit-code;
-         go tool vet .;
+         go vet .;
          go test -v -race ./..."

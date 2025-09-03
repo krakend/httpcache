@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +48,7 @@ func setup() {
 	mux := http.NewServeMux()
 	s.server = httptest.NewServer(mux)
 
-	mux.HandleFunc("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 	}))
 
@@ -71,7 +72,7 @@ func setup() {
 		w.Write([]byte("Some text content"))
 	}))
 
-	mux.HandleFunc("/nostore", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/nostore", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 	}))
 
@@ -93,27 +94,27 @@ func setup() {
 		w.Header().Set("last-modified", lm)
 	}))
 
-	mux.HandleFunc("/varyaccept", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/varyaccept", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Vary", "Accept")
 		w.Write([]byte("Some text content"))
 	}))
 
-	mux.HandleFunc("/doublevary", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/doublevary", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Vary", "Accept, Accept-Language")
 		w.Write([]byte("Some text content"))
 	}))
-	mux.HandleFunc("/2varyheaders", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/2varyheaders", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Add("Vary", "Accept")
 		w.Header().Add("Vary", "Accept-Language")
 		w.Write([]byte("Some text content"))
 	}))
-	mux.HandleFunc("/varyunused", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/varyunused", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Vary", "X-Madeup-Header")
@@ -144,11 +145,11 @@ func setup() {
 	}))
 
 	// Take 3 seconds to return 200 OK (for testing client timeouts).
-	mux.HandleFunc("/3seconds", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/3seconds", http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		time.Sleep(3 * time.Second)
 	}))
 
-	mux.HandleFunc("/infinite", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/infinite", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		for {
 			select {
 			case <-s.done:
@@ -159,13 +160,65 @@ func setup() {
 		}
 	}))
 
-	mux.HandleFunc("/json", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/fast/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(longJson)))
+		w.Write(longJson)
+	}))
+	mux.HandleFunc("/slow/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(longJson)))
+
+		f, ok := w.(http.Flusher)
+		if !ok {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		first := len(longJson) / 3
+		second := first * 2
+		w.Write(longJson[:first])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[first:second])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[second:])
+		f.Flush()
+	}))
+
+	mux.HandleFunc("/chunked/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Content-Type", "application/json")
+
+		f, ok := w.(http.Flusher)
+		if !ok {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		f.Flush()
+
+		first := len(longJson) / 3
+		second := first * 2
+		w.Write(longJson[:first])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[first:second])
+		f.Flush()
+		time.Sleep(time.Millisecond * 50)
+		w.Write(longJson[second:])
+		f.Flush()
+	}))
+
+	mux.HandleFunc("/weird/json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Header().Set("Content-Type", "application/json")
 		// This will force using bufio.Read() instead of chunkedReader.Read()
 		// to miss the EOF.
 		w.Header().Set("Transfer-encoding", "identity")
-		json.NewEncoder(w).Encode(map[string]string{"k": "v"})
+		// json.NewEncoder(w).Encode(map[string]string{"k": "v"})
+		w.Write(([]byte)(`{"k": "v"}foo`))
 	}))
 }
 
@@ -262,7 +315,7 @@ func TestDontServeHeadResponseToGetRequest(t *testing.T) {
 	}
 }
 
-func TestDontStorePartialRangeInCache(t *testing.T) {
+func TestDontStorePartialRangeInCache(t *testing.T) { // skipcq: GO-R1005
 	resetTest()
 	{
 		req, err := http.NewRequest("GET", s.server.URL+"/range", nil)
@@ -410,7 +463,113 @@ func TestCacheOnlyIfBodyRead(t *testing.T) {
 func TestCacheOnJsonBodyRead(t *testing.T) {
 	resetTest()
 	{
-		req, err := http.NewRequest("GET", s.server.URL+"/json", nil)
+		req, err := http.NewRequest("GET", s.server.URL+"/weird/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r json.RawMessage
+		err = json.NewDecoder(resp.Body).Decode(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// the response is cached on close, because server
+		// is not returning 'Content-Length' nor
+		// 'Transfer-Encoding: chunked'
+		resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "" {
+			t.Fatalf("XFromCache header isn't blank")
+		}
+	}
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/weird/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "1" {
+			t.Fatalf("XFromCache header isn't set")
+		}
+	}
+}
+
+func TestCacheOnChunkedJsonBodyRead(t *testing.T) {
+	resetTest()
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/chunked/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r json.RawMessage
+		err = json.NewDecoder(resp.Body).Decode(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// in this case, even when Close was not called yet
+		// since is used chunked it can detect EOF, before Close
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Bad status code: %d", resp.StatusCode)
+		}
+		if resp.Header.Get(XFromCache) != "" {
+			t.Fatalf("XFromCache header isn't blank")
+		}
+	}
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/chunked/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "1" {
+			t.Fatalf("XFromCache header isn't set")
+		}
+	}
+}
+
+func TestCacheOnFastJsonBodyRead(t *testing.T) {
+	resetTest()
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/fast/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r json.RawMessage
+		err = json.NewDecoder(resp.Body).Decode(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// in this case, even when Close was not called yet
+		// since is used chunked it can detect EOF, before Close
+		defer resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "" {
+			t.Fatalf("XFromCache header isn't blank")
+		}
+	}
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/fast/json", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -419,17 +578,38 @@ func TestCacheOnJsonBodyRead(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
+		if resp.Header.Get(XFromCache) != "1" {
+			t.Fatalf("XFromCache header isn't set")
+		}
+	}
+}
+
+func TestCacheOnSlowJsonBodyRead(t *testing.T) {
+	resetTest()
+	{
+		req, err := http.NewRequest("GET", s.server.URL+"/slow/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
 		var r json.RawMessage
 		err = json.NewDecoder(resp.Body).Decode(&r)
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		// in this case, even when Close was not called yet
+		// since is used chunked it can detect EOF, before Close
+		defer resp.Body.Close()
 		if resp.Header.Get(XFromCache) != "" {
 			t.Fatalf("XFromCache header isn't blank")
 		}
 	}
 	{
-		req, err := http.NewRequest("GET", s.server.URL+"/json", nil)
+		req, err := http.NewRequest("GET", s.server.URL+"/slow/json", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -763,7 +943,7 @@ func TestGetWithDoubleVary(t *testing.T) {
 	}
 }
 
-func TestGetWith2VaryHeaders(t *testing.T) {
+func TestGetWith2VaryHeaders(t *testing.T) { // skipcq: GO-R1005
 	resetTest()
 	// Tests that multiple Vary headers' comma-separated lists are
 	// merged. See https://github.com/gregjones/httpcache/issues/27.
@@ -1519,3 +1699,17 @@ func TestClientTimeout(t *testing.T) {
 		t.Error("client.Do took 2+ seconds, want < 2 seconds")
 	}
 }
+
+// we need a json that we can "stream" in small amount of bytes
+var longJson []byte = ([]byte)(`
+{
+	"a": "a_1234567890123456789012345678901234567890",
+	"b": "b_1234567890123456789012345678901234567890",
+	"c": "c_1234567890123456789012345678901234567890",
+	"d": "d_1234567890123456789012345678901234567890",
+	"e": "e_1234567890123456789012345678901234567890",
+	"f": "f_1234567890123456789012345678901234567890",
+	"g": "g_1234567890123456789012345678901234567890",
+	"h": "h_1234567890123456789012345678901234567890",
+	"i": "i_1234567890123456789012345678901234567890"
+}`)
