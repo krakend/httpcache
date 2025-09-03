@@ -3,8 +3,8 @@ package test_test
 import (
 	"testing"
 
-	"github.com/krakendio/httpcache"
-	"github.com/krakendio/httpcache/test"
+	"github.com/krakend/httpcache"
+	"github.com/krakend/httpcache/test"
 )
 
 func TestMemoryCache(t *testing.T) {

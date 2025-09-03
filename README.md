@@ -4,7 +4,7 @@ httpcache
 This a fork of github.com/gregjones/httpcache which includes various fixes.
 Original backends are removed since are not used by KrakenD.
 
-[![GoDoc](https://godoc.org/github.com/krakendio/httpcache?status.svg)](https://godoc.org/github.com/krakendio/httpcache)
+[![GoDoc](https://godoc.org/github.com/krakend/httpcache?status.svg)](https://godoc.org/github.com/krakend/httpcache)
 
 Package httpcache provides a http.RoundTripper implementation that works as a mostly [RFC 7234](https://tools.ietf.org/html/rfc7234) compliant cache for http responses.
 
